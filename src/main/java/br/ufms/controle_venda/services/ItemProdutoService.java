@@ -44,4 +44,7 @@ public class ItemProdutoService {
     }
 
 
+    public Page<ItemProduto> findAllByPedidoId(Long id, Pageable pageable) {
+return itemProdutoRepository.findAllByPedidoId(id, pageable);
+    }
 }

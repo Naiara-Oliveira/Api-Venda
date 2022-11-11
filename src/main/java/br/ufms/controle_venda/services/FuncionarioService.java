@@ -31,7 +31,8 @@ private final FuncionarioRepository funcionarioRepository;
     public Funcionario findAny(){
         Random randon = new Random();
         Long id = randon.nextLong(funcionarioRepository.count());
-        return funcionarioRepository.findById(id).get();
+        Optional<Funcionario> funcionario = funcionarioRepository.findById(id);
+        return funcionario.orElseGet(this::findAny);
     }
 
     @Transactional

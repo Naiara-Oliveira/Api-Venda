@@ -40,50 +40,72 @@ public class PedidoService {
         if (cliente.isEmpty()) {
             throw new RuntimeException("Cliente não encontrado");
         }
-        Pedido pedido = new Pedido();
 
+        Pedido pedidoRealizado = realizarPedido(pedidoDto, cliente.get());
+
+        persistirItens(pedidoDto, pedidoRealizado);
+
+        if (pedidoDto.getTipoPagamento().equals(TipoPagamento.DINHEIRO)) {
+            pedidoRealizado.setValorDesconto(BigDecimal.valueOf(0.05));
+            pedidoRealizado.setValorDesconto(pedidoRealizado.getValorTotal().multiply(pedidoRealizado.getValorDesconto()));
+        }
+        pedidoRealizado.setValorTotalComDesconto(pedidoRealizado.getValorTotal().subtract(pedidoRealizado.getValorDesconto()));
+
+        realizarVenda(pedidoRealizado);
+
+    }
+
+    private void realizarVenda(Pedido pedidoRealizado) {
+        Funcionario funcionario = funcionarioService.findAny();
+
+        Venda venda = new Venda();
+        venda.setPedido(pedidoRealizado);
+        venda.setFuncionario(funcionario);
+        venda.setComissao(pedidoRealizado.getValorTotal().multiply(valueOf(0.02)));
+        vendaService.novaVenda(venda);
+    }
+
+    private void persistirItens(PedidoDto pedidoDto, Pedido pedidoRealizado) {
+        BigDecimal valorTotalPedido  = new BigDecimal(0);
         for (ItemProdutoDto itemProdutoDto : pedidoDto.getItemProduto()) {
             ItemProduto item = new ItemProduto();
-            Optional<Produto> byNome = produtoService.findByNomeAndDescricao(itemProdutoDto.getNome(), itemProdutoDto.getDescricao());
-            if (byNome.isEmpty()) {
+            Optional<Produto> produto = produtoService.findByNomeAndDescricao(itemProdutoDto.getNome(), itemProdutoDto.getDescricao());
+            if (produto.isEmpty()) {
                 throw new RuntimeException("Produto não encontrado");
             }
 
-            item.setProduto(byNome.get());
+
+            item.setProduto(produto.get());
             item.setQuantidade(itemProdutoDto.getQuantidade());
-            item.setValorUnitario(byNome.get().getPreco());
+            item.setValorUnitario(produto.get().getPreco());
             item.setValorTotal(item.getValorUnitario().multiply(valueOf(item.getQuantidade())));
-            item.setPedido(pedido);
-            pedido.adicionarItem(item);
+
+            item.setPedido(pedidoRealizado);
+
+            valorTotalPedido = valorTotalPedido.add(item.getValorTotal());
+
+            pedidoRealizado.adicionarItem(item);
+
+            this.itemProdutoService.novoItemPedido(item);
+
         }
-        pedido.setCliente(cliente.get());
+        pedidoRealizado.setValorTotal(new BigDecimal(String.valueOf(valorTotalPedido)));
+    }
+
+    private Pedido realizarPedido(PedidoDto pedidoDto, Cliente cliente) {
+        Pedido pedido = new Pedido();
+
+        pedido.setCliente(cliente);
         pedido.setData(LocalDateTime.now());
         pedido.setTipoPagamento(pedidoDto.getTipoPagamento());
-       double contador = 0;
-        for (ItemProduto itemProduto : pedido.getItemProduto()) {
-            contador += itemProduto.getValorTotal().doubleValue();
-        }
-        pedido.setValorTotal(valueOf(contador));
+        pedido.setValorTotal(new BigDecimal(0));
+        pedido.setValorTotalComDesconto(new BigDecimal(0));
 
-        if (pedidoDto.getTipoPagamento().equals(TipoPagamento.DINHEIRO)) {
-            pedido.setValorDesconto(BigDecimal.valueOf(0.05));
-            pedido.setValorDesconto(pedido.getValorTotal().multiply(pedido.getValorDesconto()));
-        }
+        return this.pedidoRepository.save(pedido);
+    }
 
-        pedido.setValorTotalComDesconto(pedido.getValorTotal().subtract(pedido.getValorDesconto()));
-
-
-        Funcionario funcionario = funcionarioService.findAny();
-        this.pedidoRepository.save(pedido);
-        Venda venda = new Venda();
-        venda.setPedido(pedido);
-        venda.setFuncionario(funcionario);
-        venda.setComissao(pedido.getValorTotal().multiply(valueOf(0.02)));
-
-
-        vendaService.novaVenda(venda);
-
-
+    public Page<ItemProduto> findAllByPedidoId(Long id, Pageable pageable) {
+        return itemProdutoService.findAllByPedidoId(id, pageable);
     }
 
 
